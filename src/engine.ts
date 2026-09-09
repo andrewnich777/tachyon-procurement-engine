@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, asc, sql, inArray } from 'drizzle-orm';
 import type { Database, Tx } from './db/index.js';
 import * as t from './db/schema.js';
-import { command, defaults, fail, hash, project, total, day, addDays, daysBetween, policyData,
+import { command, constraints, defaults, fail, hash, project, total, day, addDays, daysBetween, policyData,
   type State, type Event, type RequestData, type QuoteData, type Command } from './domain.js';
 import { evaluate, routeBlock } from './policy.js';
 import { assessResearch } from './research.js';
@@ -60,7 +60,7 @@ export class Engine {
     const researcher=actors.find(actor=>actor.id===s.requesterId&&actor.role==='agent')??actors.find(actor=>actor.role==='agent');
     const blocks=result.blocks.map(b=>routeBlock(b,result.escalationOwnerId,researcher?.id??null));
     const humanBlocks=result.humanBlocks.map(b=>routeBlock(b,result.escalationOwnerId,researcher?.id??null));
-    const research={...result.research,issues:result.research.issues.map(issue=>({...issue,resolverType:'agent' as const,resolverId:researcher?.id??null}))};
+    const research={...result.research,issues:result.research.issues.map(issue=>({...issue,resolverType:issue.code==='constraints-unconfirmed'?'owner' as const:'agent' as const,resolverId:issue.code==='constraints-unconfirmed'?result.escalationOwnerId:researcher?.id??null}))};
     return {...result,blocks,humanBlocks,research,period};
   }
   async actorExists(c:Conn,a:Actor,id:string) {
@@ -132,23 +132,42 @@ export class Engine {
         }
         case 'request.create': {
           const rid=randomUUID(),data=await this.enrich(c,a,cmd.data);
-          await c.insert(t.requests).values({id:rid,workspaceId:a.workspaceId}); await emit('request.created',{data},rid);
+          await c.insert(t.requests).values({id:rid,workspaceId:a.workspaceId}); await emit('request.created',{data,actorRole:a.role},rid);
           result={id:rid,revision:1}; break;
         }
         case 'request.update': {
           active(s!);
           const data=await this.enrich(c,a,cmd.data,{...s!.data,regulated:s!.data.regulated||!!s!.classification?.regulated,technical:s!.data.technical||!!s!.classification?.technical});
           if(s!.orders.some(o=>['confirmed','unknown'].includes(o.state))) fail('Ordered requests cannot change scope. Use fulfillment and delivery updates.',409);
-          await emit('request.updated',{data,reason:cmd.reason}); result={id:s!.id,revision:s!.revision+1}; break;
+          if(hash(constraints(data))!==hash(constraints(s!.data))) {
+            role(a,'owner','requester');
+            if(a.role==='requester' && a.id!==s!.requesterId) fail('Only the original requester or owner can change constraints.',403);
+          }
+          await emit('request.updated',{data,reason:cmd.reason,actorRole:a.role}); result={id:s!.id,revision:s!.revision+1}; break;
+        }
+        case 'request.propose': {
+          role(a,'owner','agent','requester'); active(s!);
+          const data=await this.enrich(c,a,cmd.data,s!.data);
+          const event=await emit('request.proposed',{data,reason:cmd.reason,baseRevision:s!.revision});
+          result={id:s!.id,proposalId:event.id,revision:s!.revision,applied:false}; break;
+        }
+        case 'request.confirm': {
+          role(a,'owner','requester'); active(s!);
+          if(a.role==='requester' && a.id!==s!.requesterId) fail('Only the original requester or owner can confirm constraints.',403);
+          await emit('request.confirmed',{revision:s!.revision,evidence:cmd.evidence,actorRole:a.role});
+          result={id:s!.id,revision:s!.revision,confirmed:true}; break;
         }
         case 'quote.add': {
           role(a,'owner','agent'); active(s!); const [vendor]=await c.select().from(t.vendors).where(and(eq(t.vendors.id,cmd.vendorId),scope(t.vendors.workspaceId,a)));
           if(!vendor) fail('Vendor not found.',404); total(cmd.data.costs);
+          if(cmd.data.leadBasis==='owner-estimate') role(a,'owner');
+          if(cmd.data.costBasis==='confirmed' && !cmd.data.costEvidence) fail('Confirmed cost requires final payable cost evidence.');
           const criteria=new Set(['scope','availability','reviews',...s!.data.requirements.map(r=>'requirement:'+r.key)]),seen=new Set<string>();
           for(const evidence of cmd.data.evidence??[]) {
             if(!criteria.has(evidence.criterion)) fail('Unknown evidence criterion: '+evidence.criterion);
             if(seen.has(evidence.criterion)) fail('Duplicate evidence criterion: '+evidence.criterion);
             seen.add(evidence.criterion);
+            if(evidence.availability?.itemKeys.some(key=>!s!.data.items.some(item=>item.key===key))) fail('Availability refers to an unknown request item.');
             if(evidence.itemKeys?.some(key=>!s!.data.items.some(item=>item.key===key))) fail('Evidence refers to an unknown request item.');
           }
           for(const review of cmd.data.reviews??[]) if(review.itemKey && !s!.data.items.some(i=>i.key===review.itemKey)) fail('Review refers to an unknown request item.');
@@ -158,7 +177,7 @@ export class Engine {
             if(reviewKeys.has(key)) fail('Duplicate review observation; do not count the same source twice.');
             reviewKeys.add(key);
           }
-          const qid=randomUUID(),data={...cmd.data,requestRevision:s!.revision};
+          const qid=randomUUID(),data={...cmd.data,requestRevision:s!.revision,recordedBy:{actorId:a.id,role:a.role,recordedAt:new Date().toISOString()}};
           await c.insert(t.quotes).values({id:qid,workspaceId:a.workspaceId,requestId:s!.id,vendorId:cmd.vendorId,data});
           await emit('quote.recorded',{quoteId:qid,vendorId:cmd.vendorId,sources:data.sources}); result={id:qid,research:assessResearch(s!,{id:qid,data})}; break;
         }

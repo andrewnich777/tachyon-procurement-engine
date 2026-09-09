@@ -27,12 +27,21 @@ export const requestData = z.object({ title: short, description: z.string().max(
 export type RequestData = z.infer<typeof requestData>;
 export const costs = z.object({ subtotal: cents, discount: cents.default(0), shipping: cents.nullable(), tax: cents.nullable(),
   hazmat: cents.nullable(), other: cents.nullable(), restockingTerms: z.string().max(2000).default('') }).strict();
+export const provenance = z.object({actorId: id, role: short, recordedAt: z.iso.datetime()}).strict();
+// Ignore category enrichment when comparing user-controlled scope.
+export function constraints(data:RequestData) {
+  return {title:data.title,description:data.description,items:data.items.map(({categoryId,...item})=>item),
+    site:data.site,neededBy:data.neededBy,bufferDays:data.bufferDays,budgetCents:data.budgetCents,currency:data.currency,ownerId:data.ownerId??null};
+}
 export const researchEvidence = z.object({
   criterion: short.describe('scope, availability, reviews, or requirement:<request requirement key>'),
   status: z.enum(['supported','contradicted','unresolved']),
   finding: short,
   itemKeys: z.array(short).max(30).optional().describe('For scope evidence, the request item keys covered by this finding.'),
   site: short.optional().describe('For supported availability evidence, the request destination/site covered by the source.'),
+  availability: z.object({basis:z.enum(['location-confirmed','estimate','listing-only']),
+    location:short, itemKeys:z.array(short).min(1).max(30)}).strict().optional()
+    .describe('For availability: exact store/address or delivery destination, covered items, and whether availability was actually confirmed there.'),
   sources: z.array(source).max(20).default([]),
 }).strict().superRefine((v,ctx)=>{
   if(v.status!=='unresolved' && !v.sources.length)
@@ -48,7 +57,9 @@ export const reviewEvidence = z.object({
   if(v.subject==='product' && !v.itemKey) ctx.addIssue({code:'custom',path:['itemKey'],message:'Product ratings require a request item key.'});
 });
 export const quoteData = z.object({ summary: short, currency: z.string().regex(/^[A-Z]{3}$/), costs,
-  leadDays: z.number().int().min(0).max(3650).nullable(), leadBasis: z.enum(['vendor', 'historical', 'owner-estimate']),
+  leadDays: z.number().int().min(0).max(3650).nullable(), leadBasis: z.enum(['vendor', 'historical', 'owner-estimate', 'agent-estimate']),
+  costBasis: z.enum(['confirmed','estimate']).optional().describe('Omitted is unknown, never confirmed. Confirmed requires evidence of the final payable total at the actual destination.'),
+  costEvidence: source.optional(),
   promisedDate: date.nullable().default(null), expiresOn: date.nullable().default(null),
   priceBasis: z.enum(['formal-quote', 'list-snapshot']).optional().describe('Omitted means formal-quote, preserving historical command payloads.'),
   priceCheckedAt: z.iso.datetime().optional().describe('Required for list-snapshot: when the catalog price was checked. Snapshots must be rechecked after seven calendar days.'),
@@ -56,7 +67,7 @@ export const quoteData = z.object({ summary: short, currency: z.string().regex(/
   evidence: z.array(researchEvidence).max(40).optional().describe('Research findings, not human verification. Include scope, availability, reviews, and each requirement:<key>.'),
   reviews: z.array(reviewEvidence).max(30).optional().describe('Separate product and supplier ratings with counts, scales, and source dates.'),
   fit: short, unknowns: z.array(short).max(30).default([]), terms: z.string().max(3000).default('') }).strict();
-export type QuoteData = z.infer<typeof quoteData>;
+export type QuoteData = z.infer<typeof quoteData> & {recordedBy?:z.infer<typeof provenance>};
 export const policyData = z.object({ currency: z.string().regex(/^[A-Z]{3}$/), perOrderCap: cents, dailyCap: cents,
   expensiveThreshold: cents.min(1), escalationOwnerId: id, timezone: z.string().refine(v => {
     try { new Intl.DateTimeFormat('en', { timeZone: v }); return true; } catch { return false; }
@@ -75,6 +86,8 @@ export const command = z.discriminatedUnion('type', [
       paymentTerms: z.string().max(2000).default(''), netTermsStatus: z.enum(['unknown','requested','approved','rejected']).default('unknown') }).strict().default({w9:'unknown',coi:'unknown',paymentTerms:'',netTermsStatus:'unknown'}) }).strict(),
   z.object({ type: z.literal('request.create'), data: requestData }).strict(),
   z.object({ type: z.literal('request.update'), ...revision, data: requestData, reason: short }).strict(),
+  z.object({ type: z.literal('request.propose'), ...revision, data:requestData, reason:short }).strict(),
+  z.object({ type: z.literal('request.confirm'), ...revision, evidence:source }).strict(),
   z.object({ type: z.literal('quote.add'), ...requestRef, vendorId: id, data: quoteData }).strict(),
   z.object({ type: z.literal('quote.select'), ...revision, quoteId: id, reason: short }).strict(),
   z.object({ type: z.literal('classification.verify'), ...revision, regulated: z.boolean(), technical: z.boolean(), evidence: source }).strict(),
@@ -101,6 +114,7 @@ export const command = z.discriminatedUnion('type', [
 export type Command = z.infer<typeof command>;
 export type Event = { id: string; requestId: string | null; actorId: string; sequence: number; type: string; payload: any; createdAt: Date | string };
 export type State = { id: string; version: number; revision: number; data: RequestData; requesterId: string;
+  constraintProvenance?: {actorId:string;role:string;recordedAt:string;confirmed:boolean}; proposals?:any[];
   status: string; quoteId: string | null; blockers: Record<string, any>; classification: any;
   verifications: Record<string, any>; approvals: any[]; receipts: any[]; feedback: any[]; orders: any[]; updatedAt: string };
 
@@ -110,9 +124,17 @@ export function project(id: string, rows: Event[]): State {
   for (const e of rows.toSorted((a,b) => a.sequence - b.sequence)) {
     s.version = e.sequence; s.updatedAt = new Date(e.createdAt).toISOString();
     const p = e.payload;
+    if(e.type==='request.created' || e.type==='request.updated') {
+      if(e.type==='request.created' || hash(constraints(s.data))!==hash(constraints(p.data)))
+        s.constraintProvenance={actorId:e.actorId,role:p.actorRole??'unknown',recordedAt:new Date(e.createdAt).toISOString(),confirmed:['owner','requester'].includes(p.actorRole)};
+    }
     switch (e.type) {
       case 'request.created': s.data = p.data; s.requesterId = e.actorId; s.revision = 1; s.status = 'researching'; break;
       case 'request.updated': s.data = p.data; s.revision++; s.classification = null; s.verifications = {}; s.approvals = []; break;
+      case 'request.confirmed':
+        if(p.revision===s.revision) s.constraintProvenance={actorId:e.actorId,role:p.actorRole,recordedAt:new Date(e.createdAt).toISOString(),confirmed:true};
+        break;
+      case 'request.proposed': (s.proposals??=[]).push({...p,id:e.id,actorId:e.actorId,recordedAt:new Date(e.createdAt).toISOString()}); break;
       case 'classification.verified': s.classification = p; break;
       case 'requirement.verified': s.verifications[p.key] = { ...p, actorId: e.actorId }; break;
       case 'requirement.revoked': delete s.verifications[p.key]; break;

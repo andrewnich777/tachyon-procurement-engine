@@ -15,3 +15,5 @@ Load category defaults and request-specific preferences/specifications. Reuse av
 The need is recorded with its current requirements, owner, and next action, or a partial request identifies what is missing and who can resolve it. Return a natural acknowledgment and useful follow-up; technical identifiers are recorded internally.
 
 Intake does not itself authorize external contact or purchasing. New categories do not create buying authority.
+
+Protect captured user constraints. Agent request.update may enrich categories and notes but cannot change scope, quantities, destination, neededBy, bufferDays, budget, currency, or ownership. Save suggested changes with request.propose and present them for human acceptance. The owner/original requester applies an accepted proposal using request.update at the current revision. request.confirm records human confirmation of the current captured constraints without changing revision. Research can continue provisionally while confirmation is pending. Do not invent a date to satisfy the checklist.

@@ -4,7 +4,7 @@ import { assessResearch } from './research.js';
 export type Block = { code: string; reason: string; resolverId: string | null };
 export function routeBlock(b:Block,ownerId:string|null,agentId:string|null) {
   if(b.code.startsWith('blocker:')) return {...b,resolverType:'assigned' as const};
-  const research=b.code.startsWith('research:') || ['classification-missing','quote-missing','quote-stale','cost-unknown','quote-expired','catalog-price-stale','currency-mismatch'].includes(b.code);
+  const research=(b.code.startsWith('research:') && b.code!=='research:constraints-unconfirmed') || ['classification-missing','quote-missing','quote-stale','cost-unknown','quote-expired','catalog-price-stale','currency-mismatch'].includes(b.code);
   return {...b,resolverId:research?agentId:ownerId,resolverType:research?'agent' as const:'owner' as const};
 }
 export function evaluate(s: State, quote: {id:string; vendorId:string; data:QuoteData & {requestRevision:number}} | null,
