@@ -1,0 +1,17 @@
+.neon
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+coverage/
+*.log
+
+# Local planning and development-agent setup
+PRD.md
+docs/procurement-taxonomy.md
+runbooks/
+tests/scenarios/
+.agents/
+.codex/
+skills-lock.json
