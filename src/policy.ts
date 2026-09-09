@@ -1,4 +1,4 @@
-import { day, hash, policyData, schedule, total, type State, type QuoteData, type Policy } from './domain.js';
+import { day, daysBetween, hash, policyData, schedule, total, type State, type QuoteData, type Policy } from './domain.js';
 
 export type Block = { code: string; reason: string; resolverId: string | null };
 export function evaluate(s: State, quote: {id:string; vendorId:string; data:QuoteData & {requestRevision:number}} | null,
@@ -20,7 +20,12 @@ export function evaluate(s: State, quote: {id:string; vendorId:string; data:Quot
   const today = day(now);
   if (q && q.requestRevision !== s.revision) block('quote-stale','Record a quote against the current request revision.');
   if (q && amount === null) block('cost-unknown','Resolve shipping, tax, hazmat, and other current charges.');
-  if (q && (!q.expiresOn || q.expiresOn < today)) block('quote-expired','A current quote validity date is required.');
+  if (q?.priceBasis==='list-snapshot') {
+    const checked = q.priceCheckedAt ? new Date(q.priceCheckedAt) : null;
+    if (!checked || !Number.isFinite(+checked) || +checked>+now || daysBetween(day(checked),today)>7)
+      block('catalog-price-stale','Recheck the catalog price and save a new snapshot; checks must be within seven calendar days.');
+    if(q.expiresOn && q.expiresOn<today) block('quote-expired','The catalog offer has expired.');
+  } else if (q && (!q.expiresOn || q.expiresOn < today)) block('quote-expired','A current quote validity date is required for a formal quote.');
   if (p && q && (q.currency!==p.currency || s.data.currency!==p.currency)) block('currency-mismatch','Request, quote, and policy currency must match; FX conversion is not automatic.');
   if (amount !== null && s.data.budgetCents !== null && amount>s.data.budgetCents) block('request-budget','Quote exceeds the request budget.');
   const expensive = !!p && amount !== null && amount>=p.expensiveThreshold;

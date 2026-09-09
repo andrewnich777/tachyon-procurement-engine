@@ -12,6 +12,10 @@ npm run procure -- describe quote.add
 
 `describe` generates JSON Schema from the same validation definitions used by the service. It works without credentials. Amounts are integer minor units (USD cents); unknown charges are `null`, not zero. Dates use `YYYY-MM-DD` calendar days; timestamps include a timezone. Current release quantities are positive integers; use an appropriate unit such as milliliters for fractional bulk quantities.
 
+HTTP discovery uses the agent bearer key: `GET /queries/describe` returns all command schemas; `GET /queries/describe/quote.add` returns one. `GET /queries/playbooks` returns all deployed playbooks with content hashes; `GET /queries/playbooks/research` returns one (the `.md` suffix is also accepted). Unknown names return 404. GitHub remains the source for maintaining instructions; the deployed API serves them without a GitHub connector or raw-file fetching.
+
+`quote.add.data.priceBasis` may be `formal-quote` (also the default when omitted) or `list-snapshot`. Formal quotes need a current `expiresOn` to pass purchasing policy. Catalog snapshots can omit it but need `priceCheckedAt` within seven calendar days, never in the future. An explicit catalog expiry is still honored. Research can save incomplete candidates; purchasing remains blocked until charges and required evidence are resolved.
+
 ## Send a command
 
 ```sh
@@ -66,6 +70,8 @@ npm run procure -- query knowledge --q SUPPLIER_OR_ITEM
 ```
 
 HTTP equivalent: `GET /queries/<name>?id=...&q=...` with the same bearer key. `blocked` returns all open requests with their policy results, missing evidence, manual blockers, resolvers and schedule. `knowledge` searches vendor identity, source notes, purchases and attributed experience. It reports real and simulated observations separately and includes category-specific lead-time summaries.
+
+`me` includes the workspace name and simulation mode. The agent cannot enumerate other workspaces. Single-request and request-list responses both include `selectedQuote` (null only when none is selected) alongside `quoteId`.
 
 `request.revision` changes when purchasing requirements change. Supply it as `expectedRevision` where required. `request.version` is the complete event sequence used to identify a snapshot. The CLI returns structured records for the bot to summarize with appropriate evidence; it does not fabricate natural-language answers.
 

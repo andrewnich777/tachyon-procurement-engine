@@ -29,7 +29,10 @@ export const costs = z.object({ subtotal: cents, discount: cents.default(0), shi
   hazmat: cents.nullable(), other: cents.nullable(), restockingTerms: z.string().max(2000).default('') }).strict();
 export const quoteData = z.object({ summary: short, currency: z.string().regex(/^[A-Z]{3}$/), costs,
   leadDays: z.number().int().min(0).max(3650).nullable(), leadBasis: z.enum(['vendor', 'historical', 'owner-estimate']),
-  promisedDate: date.nullable().default(null), expiresOn: date.nullable(), sources: z.array(source).min(1).max(20),
+  promisedDate: date.nullable().default(null), expiresOn: date.nullable().default(null),
+  priceBasis: z.enum(['formal-quote', 'list-snapshot']).optional().describe('Omitted means formal-quote, preserving historical command payloads.'),
+  priceCheckedAt: z.iso.datetime().optional().describe('Required for list-snapshot: when the catalog price was checked. Snapshots must be rechecked after seven calendar days.'),
+  sources: z.array(source).min(1).max(20),
   fit: short, unknowns: z.array(short).max(30).default([]), terms: z.string().max(3000).default('') }).strict();
 export type QuoteData = z.infer<typeof quoteData>;
 export const policyData = z.object({ currency: z.string().regex(/^[A-Z]{3}$/), perOrderCap: cents, dailyCap: cents,

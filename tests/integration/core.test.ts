@@ -11,9 +11,9 @@ import { loadEnv,required } from '../../src/config.js';
 import { createApp } from '../../src/server.js';
 import { renderGantt } from '../../src/gantt.js';
 
-loadEnv();
+loadEnv(process.env.PROCUREMENT_TEST_ENV_FILE??'.env.test.local');
 if(!process.env.NEON_BRANCH || process.env.NEON_BRANCH==='production') throw new Error('Integration tests require an explicit development branch.');
-const {pool,db}=database(process.env.TEST_DATABASE_URL??required('DATABASE_URL_UNPOOLED'));
+const {pool,db}=database(required('TEST_DATABASE_URL'));
 after(async()=>{await pool.end();});
 const evidence={url:'https://example.com/fictional-evidence',note:'FICTIONAL TEST EVIDENCE',checkedAt:new Date().toISOString(),fictional:true};
 const today=day();
@@ -121,6 +121,20 @@ test('HTTP interface rejects missing auth, unauthorized approvals and malformed 
     const response=await fetch(base+'/commands',{method:'POST',headers,body:JSON.stringify({type:'policy.set',data:f.policy})});assert.equal(response.status,403);
     assert.equal((await fetch(base+'/commands',{method:'POST',headers,body:'bad'})).status,400);
     const me=await fetch(base+'/queries/me',{headers});assert.equal(me.status,200);assert.equal((await me.json()).id,f.agent.id);
+    assert.equal((await fetch(base+'/queries/describe/quote.add')).status,401);
+    const schema=await fetch(base+'/queries/describe/quote.add',{headers});assert.equal(schema.status,200);
+    assert.equal((await schema.json()).properties.type.const,'quote.add');
+    assert.equal((await fetch(base+'/queries/describe/not-a-command',{headers})).status,404);
+    const books=await (await fetch(base+'/queries/playbooks',{headers})).json();
+    assert.ok(books.playbooks.some((p:any)=>p.name==='research' && p.content.includes('quote') && p.revision.length===64));
+    assert.equal((await fetch(base+'/queries/playbooks/research.md',{headers})).status,200);
+    assert.equal((await fetch(base+'/queries/playbooks/not-a-playbook',{headers})).status,404);
+    const {r,q}=await f.request('HTTP selected quote regression');
+    const selected=await (await fetch(base+'/queries/request?id='+r.id,{headers})).json();
+    assert.equal(selected.quoteId,q.id);assert.equal(selected.selectedQuote.id,q.id);
+    const visible=await (await fetch(base+'/queries/requests',{headers})).json();
+    assert.deepEqual(visible.map((r:any)=>r.id),[r.id]);
+    assert.deepEqual(visible[0].selectedQuote,selected.selectedQuote);
   } finally { await new Promise<void>(resolve=>server.close(()=>resolve())); }
 });
 

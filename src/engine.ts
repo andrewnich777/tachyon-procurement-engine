@@ -271,14 +271,17 @@ export class Engine {
   }
   async read(a:Actor,kind:string,params:Record<string,string>={}) {
     switch(kind) {
-      case 'me': return {id:a.id,name:a.name,role:a.role,workspaceId:a.workspaceId};
+      case 'me': {
+        const w=await this.workspace(this.db,a);
+        return {id:a.id,name:a.name,role:a.role,workspaceId:a.workspaceId,workspaceName:w.name,mode:w.mode};
+      }
       case 'categories': return this.db.select().from(t.categories).where(scope(t.categories.workspaceId,a));
       case 'policy': return (await this.workspace(this.db,a)).policy;
       case 'actors': role(a,'owner','agent','reviewer'); return this.db.select({id:t.actors.id,name:t.actors.name,role:t.actors.role}).from(t.actors).where(scope(t.actors.workspaceId,a));
       case 'request': {
         const s=await this.state(this.db,a,params.id), policy=await this.policy(this.db,a,s);
         const qs=await this.db.select().from(t.quotes).where(eq(t.quotes.requestId,s.id));
-        return {...s,quotes:qs,policy};
+        return {...s,quotes:qs,selectedQuote:qs.find(q=>q.id===s.quoteId)??null,policy};
       }
       case 'events': await this.state(this.db,a,params.id); return this.db.select().from(t.events).where(eq(t.events.requestId,params.id)).orderBy(asc(t.events.sequence));
       case 'requests': case 'blocked': case 'timeline': {

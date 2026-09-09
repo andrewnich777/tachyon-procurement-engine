@@ -7,6 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "demo:seed": "tsx scripts/seed-demo.ts",
     "start": "tsx src/server.ts",
     "procure": "tsx src/cli.ts",
     "db:generate": "drizzle-kit generate",
@@ -17,6 +18,7 @@
     "test:integration": "tsx --test --test-concurrency=1 tests/integration/*.test.ts"
   },
   "dependencies": {
+    "@vercel/functions": "^3.9.7",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.23.0",
     "zod": "^4.6.0"

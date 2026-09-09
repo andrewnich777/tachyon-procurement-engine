@@ -1,0 +1,9 @@
+/*
+!api
+!src
+!playbooks
+!public
+!package.json
+!package-lock.json
+!tsconfig.json
+!vercel.json

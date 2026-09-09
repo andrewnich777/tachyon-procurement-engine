@@ -2,8 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { loadEnv, required } from './config.js';
 import { renderGantt } from './gantt.js';
-import { command } from './domain.js';
-import { z } from 'zod';
+import { describe } from './discovery.js';
 
 const [verb,arg,...rest]=process.argv.slice(2);
 if(!verb || verb==='help') {
@@ -22,9 +21,7 @@ The Gantt is a dated, self-contained snapshot; regenerate to refresh it.`);
   process.exit(0);
 }
 if(verb==='describe') {
-  const schema=arg?command.options.find(v=>v.shape.type.value===arg):command;
-  if(!schema) { console.error('Unknown command type.');process.exit(1); }
-  console.log(JSON.stringify(z.toJSONSchema(schema,{io:'input'}),null,2));process.exit(0);
+  console.log(JSON.stringify(describe(arg),null,2));process.exit(0);
 }
 loadEnv(process.env.PROCUREMENT_ENV_FILE??'.env.bot.local');
 const base=required('PROCUREMENT_URL').replace(/\/$/,''),key=required('PROCUREMENT_KEY');

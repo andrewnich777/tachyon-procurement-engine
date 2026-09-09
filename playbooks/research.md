@@ -6,6 +6,8 @@ Apply [conversation.md](conversation.md) and [escalation.md](escalation.md). Cho
 
 Consult prior purchases, vendors, sources, and relevant experience. For candidates retain supplier identity, source URLs/documents, checked-at time, requirement fit, scope/quantity basis, costs/currency, shipping/tax/fees where known, lead-time basis, terms, and consequential unknowns. A researched listing is not a supplier-confirmed quote.
 
+For a catalog/list price use `priceBasis: "list-snapshot"` and `priceCheckedAt` with the actual check timestamp. `expiresOn` may be omitted; do not invent a supplier validity date. Snapshots older than seven calendar days must be researched again and saved as new quotes before commitment. Include a known offer expiry when one exists. Formal quotes (the default) still need a current `expiresOn` before commitment. Neither basis bypasses unknown landed costs, evidence, approvals, or human ordering requirements. A changed price or refreshed snapshot is a new immutable quote and needs a new selection and any required approval.
+
 Use existing bot tools and optional independent helpers. Keep a single coherent recommendation and avoid duplicated research. Work within any configured research budget; return partial findings if that limit is reached.
 
 ## Required outcome

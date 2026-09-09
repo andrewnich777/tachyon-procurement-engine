@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "npm run typecheck",
+  "outputDirectory": "public",
+  "functions": {
+    "api/index.ts": { "maxDuration": 60, "includeFiles": "playbooks/*.md" }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
+}
