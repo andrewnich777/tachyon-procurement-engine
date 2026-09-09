@@ -50,6 +50,5 @@ try {
     }
     requests.push({id:r.id,title:item.title});
   }
-  await db.update(t.workspaces).set({name:'Tachyon Demo'}).where(eq(t.workspaces.id,w.id));
   console.log(JSON.stringify({workspaceId:w.id,mode:w.mode,requests,note:'No purchases placed. Existing requests and audit history retained.'},null,2));
 } finally {await pool.end();}

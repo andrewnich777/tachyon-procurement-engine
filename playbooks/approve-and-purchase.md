@@ -2,9 +2,11 @@
 
 Apply [conversation.md](conversation.md) and [escalation.md](escalation.md). Discuss the decision naturally; bind the eventual action to precise persisted scope.
 
-## Required decision packet
+## Information needed for a purchasing decision
 
 Identify the request/quote revision, exact items or service scope, supplier/account, destination, final payable total and cost components, timing, requirements, evidence, and current policy result. Resolve consequential unknowns before commitment.
+
+Keep these details in the records; summarize only what the user needs to decide. Do not present a full technical checklist for a simple status question or routine request.
 
 Expensive and regulated requests stay with the human escalation owner for ordering. Verified documentation and technical requirements remain necessary. For other requests, obtain only the approval or delegation actually required by policy.
 

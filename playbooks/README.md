@@ -16,4 +16,4 @@ Persist useful evidence and outcomes in Neon through the service. Record request
 
 Your agent key cannot grant human approvals, change policy, or verify mandatory evidence. Continue useful research when a purchasing action is blocked. Present the reason, evidence, resolver, alternatives and decision deadline. Follow [runtime connection instructions](../docs/runtime-connection.md) to preserve the human identity boundary.
 
-The current executor is simulated. Never describe its confirmations as real vendor orders. The shared Gantt is a dated export; regenerate it when records change. The bot's connection and channel setup are provided by the operator.
+Native Grok chat is the working interface. Treat requests and sourced research as ordinary procurement work. Checkout currently produces a simulated result, which must be identified when ordering is discussed or a checkout result is reported. That execution limitation does not make the rest of the request fictional; follow the naming and communication guidance in [conversation.md](conversation.md). The shared Gantt is a dated export; regenerate it when records change.

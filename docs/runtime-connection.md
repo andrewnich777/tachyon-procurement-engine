@@ -1,6 +1,6 @@
 # Connect the conversational operator
 
-Use the existing Grok Bot/Slack connection. This repository supplies a command interface and playbooks; it does not install Slack listeners or configure the user's bot account.
+Use native Grok Bot chat. This repository supplies the procurement API and conversational playbooks; a Slack connection is not required.
 
 ## Service side
 
@@ -12,7 +12,7 @@ Give the bot a reachable `PROCUREMENT_URL` and its agent-scoped `PROCUREMENT_KEY
 
 The bot can invoke the CLI from a checkout or call the HTTP routes in [commands.md](commands.md). Load `GET /queries/playbooks` for the deployed procurement instructions and `GET /queries/describe/<command.type>` for input schemas. Keep playbook content revisions with the job's saved context and use stable command keys. Query live status through the service, not Git history.
 
-For a hosted API, follow [hosting](hosting.md). The database and service run in the cloud; the laptop and tunnel are unnecessary. Give Grok Bot this initial instruction with its URL and secure agent key: "Read `/queries/me`, confirm the agent role and Tachyon Demo workspace, then load `/queries/playbooks`. Use `/queries/describe/<type>` to discover commands. Handle my procurement requests through this service and follow its purchasing gates."
+For a hosted API, follow [hosting](hosting.md). The database and service run in the cloud; the laptop and tunnel are unnecessary. Give Grok Bot this initial instruction with its URL and secure agent key: "Read `/queries/me`, confirm the agent role and my procurement workspace, then load `/queries/playbooks`. Use `/queries/describe/<type>` to discover commands. Handle my requests here in native chat. Use ordinary item/service names and real sourced research; identify simulated checkout accurately when it is used. Follow the current playbooks rather than earlier staged-example instructions."
 
 The person making an approval uses their own owner/reviewer identity. A bot's statement that a human approved is not an authenticated approval. The current CLI supports a separate owner environment file for that purpose; a Slack integration must preserve the same identity boundary when adding its approval mechanism. Reactions or a message forwarded by the agent are not substitutes for that boundary.
 
