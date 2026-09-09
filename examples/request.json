@@ -1,0 +1,12 @@
+{
+  "type": "request.create",
+  "data": {
+    "title": "Example: optical mounting hardware",
+    "description": "Fictional intake example. Research compatible mounts after the requester supplies the drawing.",
+    "items": [{ "key": "mount", "description": "Optical mount to an engineer-supplied drawing", "quantity": 2, "categoryId": null }],
+    "site": "Fictional workshop",
+    "neededBy": null,
+    "budgetCents": null,
+    "notes": "Keep missing dates and specifications explicit. This example does not authorize a purchase."
+  }
+}

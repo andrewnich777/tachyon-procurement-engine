@@ -1,0 +1,19 @@
+# Research and recommend
+
+Apply [conversation.md](conversation.md) and [escalation.md](escalation.md). Choose the research strategy appropriate to the user's outcome; no fixed vendor count or step order is required.
+
+## Required information and evidence
+
+Consult prior purchases, vendors, sources, and relevant experience. For candidates retain supplier identity, source URLs/documents, checked-at time, requirement fit, scope/quantity basis, costs/currency, shipping/tax/fees where known, lead-time basis, terms, and consequential unknowns. A researched listing is not a supplier-confirmed quote.
+
+Use existing bot tools and optional independent helpers. Keep a single coherent recommendation and avoid duplicated research. Work within any configured research budget; return partial findings if that limit is reached.
+
+## Required outcome
+
+Persist reusable findings, including useful unselected candidates. Recommend an option with evidence, relevant alternatives, delivered cost, deadline fit, tradeoffs, and unresolved questions. Explain when prior supplier experience affected the result. For unavailable quotes, say what information requires vendor contact.
+
+Research permission covers exploration and ordinary record contribution; outreach and purchasing follow their configured authority. Do not mark technical suitability or documentation verified without the required evidence.
+
+## Done when
+
+The user has a supported recommendation or a precise account of what remains unknown, the records have been saved, and any escalation has an owner and next action. A failed write is reported as unsaved work.

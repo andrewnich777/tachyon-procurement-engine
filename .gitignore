@@ -9,6 +9,8 @@ coverage/
 
 # Local planning and development-agent setup
 PRD.md
+IMPLEMENTATION_PLAN.md
+artifacts/
 docs/procurement-taxonomy.md
 runbooks/
 tests/scenarios/
