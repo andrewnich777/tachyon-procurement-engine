@@ -10,6 +10,14 @@ For a catalog/list price use `priceBasis: "list-snapshot"` and `priceCheckedAt` 
 
 Use existing bot tools and optional independent helpers. Keep a single coherent recommendation and avoid duplicated research. Work within any configured research budget; return partial findings if that limit is reached.
 
+## Ratings and review evidence
+
+Prefer products and service providers with high ratings supported by a meaningful volume of reviews. Consider rating and review count together, not rating divided by count: that calculation would reward listings with very few reviews. All else equal, a 4.7/5 rating from 800 relevant reviews is stronger evidence than 5/5 from three reviews. Treat this as a research preference, not a rigid cutoff or an automatic purchasing gate.
+
+When available, save the rating, rating scale, review count, platform, source URL, and checked-at time in the existing source notes. Distinguish product reviews from seller or contractor reviews, and check that reviews apply to the exact product variant or service location. Consider recent reviews, recurring complaints, verified-purchase indicators, and suspicious review patterns. Compare similar sources and scales; do not blindly combine platform totals or count syndicated reviews twice.
+
+Explain a review-based preference briefly when it affects the recommendation. Do not invent missing ratings or imply that unrated specialist equipment is unsuitable. For technical purchases, specification fit, credible documentation, and relevant supplier experience can matter more than consumer reviews. Ratings never override required specifications, allergies, permits, budget, or delivery constraints.
+
 ## Required outcome
 
 Persist reusable findings, including useful unselected candidates. Recommend an option with evidence, relevant alternatives, delivered cost, deadline fit, tradeoffs, and unresolved questions. Explain when prior supplier experience affected the result. For unavailable quotes, say what information requires vendor contact.
