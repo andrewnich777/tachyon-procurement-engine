@@ -14,6 +14,7 @@ Office supplies, contractor services, and technical equipment share the same lif
 - Vendor/category lead-time observations, with simulated history separated from actual supplier performance.
 - A standalone interactive HTML Gantt generated from the same database records.
 - Authenticated HTTP command-schema and playbook discovery, plus catalog price snapshots with freshness checks.
+- Source-linked requirement checklists, structured ratings/review counts, quote consistency feedback, and separate agent/owner blocker routing.
 
 The automated checkout is **simulated**. This release does not send vendor messages, make payments, or book services. Grok Bot/Slack transport is supplied by the operator; this repository provides the executable interface and conversational playbooks.
 

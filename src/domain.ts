@@ -27,12 +27,34 @@ export const requestData = z.object({ title: short, description: z.string().max(
 export type RequestData = z.infer<typeof requestData>;
 export const costs = z.object({ subtotal: cents, discount: cents.default(0), shipping: cents.nullable(), tax: cents.nullable(),
   hazmat: cents.nullable(), other: cents.nullable(), restockingTerms: z.string().max(2000).default('') }).strict();
+export const researchEvidence = z.object({
+  criterion: short.describe('scope, availability, reviews, or requirement:<request requirement key>'),
+  status: z.enum(['supported','contradicted','unresolved']),
+  finding: short,
+  itemKeys: z.array(short).max(30).optional().describe('For scope evidence, the request item keys covered by this finding.'),
+  site: short.optional().describe('For supported availability evidence, the request destination/site covered by the source.'),
+  sources: z.array(source).max(20).default([]),
+}).strict().superRefine((v,ctx)=>{
+  if(v.status!=='unresolved' && !v.sources.length)
+    ctx.addIssue({code:'custom',path:['sources'],message:'Supported or contradicted findings require source evidence.'});
+});
+export const reviewEvidence = z.object({
+  subject: z.enum(['product','supplier']), target: short.describe('Exact product/variant or supplier/location being rated'),
+  itemKey: short.optional().describe('Required for product ratings; links to a request item.'),
+  platform: short, rating: z.number().min(0), scaleMax: z.number().min(1).max(100),
+  reviewCount: z.number().int().min(1).max(1_000_000_000), source,
+}).strict().superRefine((v,ctx)=>{
+  if(v.rating>v.scaleMax) ctx.addIssue({code:'custom',path:['rating'],message:'Rating cannot exceed its scale.'});
+  if(v.subject==='product' && !v.itemKey) ctx.addIssue({code:'custom',path:['itemKey'],message:'Product ratings require a request item key.'});
+});
 export const quoteData = z.object({ summary: short, currency: z.string().regex(/^[A-Z]{3}$/), costs,
   leadDays: z.number().int().min(0).max(3650).nullable(), leadBasis: z.enum(['vendor', 'historical', 'owner-estimate']),
   promisedDate: date.nullable().default(null), expiresOn: date.nullable().default(null),
   priceBasis: z.enum(['formal-quote', 'list-snapshot']).optional().describe('Omitted means formal-quote, preserving historical command payloads.'),
   priceCheckedAt: z.iso.datetime().optional().describe('Required for list-snapshot: when the catalog price was checked. Snapshots must be rechecked after seven calendar days.'),
   sources: z.array(source).min(1).max(20),
+  evidence: z.array(researchEvidence).max(40).optional().describe('Research findings, not human verification. Include scope, availability, reviews, and each requirement:<key>.'),
+  reviews: z.array(reviewEvidence).max(30).optional().describe('Separate product and supplier ratings with counts, scales, and source dates.'),
   fit: short, unknowns: z.array(short).max(30).default([]), terms: z.string().max(3000).default('') }).strict();
 export type QuoteData = z.infer<typeof quoteData>;
 export const policyData = z.object({ currency: z.string().regex(/^[A-Z]{3}$/), perOrderCap: cents, dailyCap: cents,

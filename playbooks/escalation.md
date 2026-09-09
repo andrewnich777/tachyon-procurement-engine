@@ -19,4 +19,6 @@ Every escalation records the reason, evidence, affected action, resolver, respon
 
 Continue unrelated permitted research while a commitment is blocked. Escalations should not stop the whole request unnecessarily. Suppress repeated unchanged alerts; notify on material changes or an overdue decision.
 
+Use the returned `resolverType` and `resolverId`. Research issues and agent-owned blockers are work for the Procurement Bot, not automatic requests for owner approval. Investigate missing prices, tax, stock, timing and product evidence; ask the user only for facts you cannot establish or choices they must make. Owner/reviewer verification remains separate even when research has supporting sources. A manual blocker's named resolver is preserved.
+
 The backend enforces amounts, approval scope, documentation validity, state transitions, and idempotency. Conversational instructions and native bot approval controls complement that enforcement.

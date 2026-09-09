@@ -4,7 +4,8 @@ import type { Database, Tx } from './db/index.js';
 import * as t from './db/schema.js';
 import { command, defaults, fail, hash, project, total, day, addDays, daysBetween, policyData,
   type State, type Event, type RequestData, type QuoteData, type Command } from './domain.js';
-import { evaluate } from './policy.js';
+import { evaluate, routeBlock } from './policy.js';
+import { assessResearch } from './research.js';
 
 export type Actor = typeof t.actors.$inferSelect;
 type Conn = Database | Tx;
@@ -51,11 +52,16 @@ export class Engine {
       return false;
     });
     const result=evaluate(s,await this.selected(c,a,s),w.policy,spent,allowed,new Date(),w.policyVersion);
+    const actors=await c.select({id:t.actors.id,role:t.actors.role}).from(t.actors).where(and(scope(t.actors.workspaceId,a),eq(t.actors.enabled,true))).orderBy(asc(t.actors.createdAt),asc(t.actors.id));
     if(!p.success) {
-      const [owner]=await c.select({id:t.actors.id}).from(t.actors).where(and(scope(t.actors.workspaceId,a),eq(t.actors.role,'owner'),eq(t.actors.enabled,true)));
-      if(owner) { result.escalationOwnerId=owner.id; for(const b of [...result.blocks,...result.humanBlocks]) b.resolverId=owner.id; }
+      const owner=actors.find(actor=>actor.role==='owner');
+      if(owner) result.escalationOwnerId=owner.id;
     }
-    return {...result,period};
+    const researcher=actors.find(actor=>actor.id===s.requesterId&&actor.role==='agent')??actors.find(actor=>actor.role==='agent');
+    const blocks=result.blocks.map(b=>routeBlock(b,result.escalationOwnerId,researcher?.id??null));
+    const humanBlocks=result.humanBlocks.map(b=>routeBlock(b,result.escalationOwnerId,researcher?.id??null));
+    const research={...result.research,issues:result.research.issues.map(issue=>({...issue,resolverType:'agent' as const,resolverId:researcher?.id??null}))};
+    return {...result,blocks,humanBlocks,research,period};
   }
   async actorExists(c:Conn,a:Actor,id:string) {
     const [x]=await c.select().from(t.actors).where(and(eq(t.actors.id,id),scope(t.actors.workspaceId,a),eq(t.actors.enabled,true)));
@@ -138,15 +144,29 @@ export class Engine {
         case 'quote.add': {
           role(a,'owner','agent'); active(s!); const [vendor]=await c.select().from(t.vendors).where(and(eq(t.vendors.id,cmd.vendorId),scope(t.vendors.workspaceId,a)));
           if(!vendor) fail('Vendor not found.',404); total(cmd.data.costs);
+          const criteria=new Set(['scope','availability','reviews',...s!.data.requirements.map(r=>'requirement:'+r.key)]),seen=new Set<string>();
+          for(const evidence of cmd.data.evidence??[]) {
+            if(!criteria.has(evidence.criterion)) fail('Unknown evidence criterion: '+evidence.criterion);
+            if(seen.has(evidence.criterion)) fail('Duplicate evidence criterion: '+evidence.criterion);
+            seen.add(evidence.criterion);
+            if(evidence.itemKeys?.some(key=>!s!.data.items.some(item=>item.key===key))) fail('Evidence refers to an unknown request item.');
+          }
+          for(const review of cmd.data.reviews??[]) if(review.itemKey && !s!.data.items.some(i=>i.key===review.itemKey)) fail('Review refers to an unknown request item.');
+          const reviewKeys=new Set<string>();
+          for(const review of cmd.data.reviews??[]) {
+            const key=hash([review.subject,review.itemKey??null,review.target.toLowerCase(),review.platform.toLowerCase(),review.source.url]);
+            if(reviewKeys.has(key)) fail('Duplicate review observation; do not count the same source twice.');
+            reviewKeys.add(key);
+          }
           const qid=randomUUID(),data={...cmd.data,requestRevision:s!.revision};
           await c.insert(t.quotes).values({id:qid,workspaceId:a.workspaceId,requestId:s!.id,vendorId:cmd.vendorId,data});
-          await emit('quote.recorded',{quoteId:qid,vendorId:cmd.vendorId,sources:data.sources}); result={id:qid}; break;
+          await emit('quote.recorded',{quoteId:qid,vendorId:cmd.vendorId,sources:data.sources}); result={id:qid,research:assessResearch(s!,{id:qid,data})}; break;
         }
         case 'quote.select': {
           role(a,'owner','agent'); active(s!); if(s!.orders.some(o=>o.state!=='failed')) fail('An order already exists.',409);
           const [q]=await c.select().from(t.quotes).where(and(eq(t.quotes.id,cmd.quoteId),eq(t.quotes.requestId,s!.id)));
           if(!q || (q.data as any).requestRevision!==s!.revision) fail('Quote does not cover this request revision.');
-          await emit('quote.selected',{quoteId:cmd.quoteId,reason:cmd.reason}); result={id:s!.id,quoteId:cmd.quoteId}; break;
+          await emit('quote.selected',{quoteId:cmd.quoteId,reason:cmd.reason}); result={id:s!.id,quoteId:cmd.quoteId,selectedQuote:q,research:assessResearch(s!,q as any)}; break;
         }
         case 'classification.verify': {
           role(a,'owner','reviewer'); active(s!);
@@ -281,7 +301,7 @@ export class Engine {
       case 'request': {
         const s=await this.state(this.db,a,params.id), policy=await this.policy(this.db,a,s);
         const qs=await this.db.select().from(t.quotes).where(eq(t.quotes.requestId,s.id));
-        return {...s,quotes:qs,selectedQuote:qs.find(q=>q.id===s.quoteId)??null,policy};
+        return {...s,quotes:qs,quoteAssessments:qs.map(q=>assessResearch(s,q as any)),selectedQuote:qs.find(q=>q.id===s.quoteId)??null,research:policy.research,policy};
       }
       case 'events': await this.state(this.db,a,params.id); return this.db.select().from(t.events).where(eq(t.events.requestId,params.id)).orderBy(asc(t.events.sequence));
       case 'requests': case 'blocked': case 'timeline': {
@@ -289,7 +309,7 @@ export class Engine {
         for(const r of rs) {
           const rows=await this.db.select().from(t.events).where(eq(t.events.requestId,r.id)); const s=project(r.id,rows as Event[]);
           if(a.role==='requester' && s.requesterId!==a.id && s.data.ownerId!==a.id) continue;
-          const policy=await this.policy(this.db,a,s); result.push({...s,policy,selectedQuote:await this.selected(this.db,a,s)});
+          const policy=await this.policy(this.db,a,s); result.push({...s,policy,research:policy.research,selectedQuote:await this.selected(this.db,a,s)});
         }
         return kind==='blocked'?result.filter(r=>!['closed','canceled'].includes(r.status)):result;
       }

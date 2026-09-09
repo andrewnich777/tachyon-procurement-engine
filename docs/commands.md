@@ -16,6 +16,18 @@ HTTP discovery uses the agent bearer key: `GET /queries/describe` returns all co
 
 `quote.add.data.priceBasis` may be `formal-quote` (also the default when omitted) or `list-snapshot`. Formal quotes need a current `expiresOn` to pass purchasing policy. Catalog snapshots can omit it but need `priceCheckedAt` within seven calendar days, never in the future. An explicit catalog expiry is still honored. Research can save incomplete candidates; purchasing remains blocked until charges and required evidence are resolved.
 
+## Structured research
+
+`quote.add.data.evidence` is an optional array for partially researched quotes. Each entry has `criterion`, `status` (`supported`, `contradicted`, `unresolved`), `finding`, and `sources`. Supported/contradicted findings require source evidence. Accepted criteria are `scope`, `availability`, `reviews`, and `requirement:<key>` from the current request. For supported scope, identify every covered request `itemKey` in `itemKeys`; for supported availability, provide the matching request `site`. The server computes cost and deadline checks from saved amounts/dates rather than trusting an agent's status assertion for those fields.
+
+`quote.add.data.reviews` stores distinct observations: `subject` (`product` or `supplier`), exact `target`, `itemKey` for products, `platform`, `rating`, `scaleMax`, `reviewCount`, and `source`. Ratings must fit their scale, counts must be positive integers, and item references must exist. Duplicate observations with the same subject/item/target/platform/URL are rejected. Different sources remain separate; there is no automatic cross-platform average or claim of review authenticity. Document unavailable reviews with an unresolved `reviews` evidence finding; that does not disqualify specialist equipment.
+
+Both quote write responses include `research`, a snapshot assessment with `checklist`, `issues`, structured `reviews`, and `readyToRecommend`. The single-request query returns the refreshed selected-quote assessment as `research` and assessments for every candidate as `quoteAssessments`. Lists and the blocked view include selected-quote research too. Current request revisions, source timestamps, and prices are reassessed on reads. Historical command replays return their original response; query the request for current assessment.
+
+Issues include a stable code, affected field, correction message, and `blocksPurchase`. Price-basis/text conflicts, unsupported vendor timing, contradicted mandatory evidence, future source dates and obsolete quote scope stop commitment. Other incomplete research produces actionable feedback without preventing draft storage or imposing a ratings cutoff. Existing quotes remain readable and are assessed without rewriting history. A corrected quote is a new immutable record with fresh selection and any required approval.
+
+These checks validate structure and recorded consistency; they do not browse source URLs, extract constraints from free text, certify allergen/technical claims, or independently verify review authenticity. Grok must capture consequential requirements and inspect the actual sources. Source-linked research never grants human verification or approval.
+
 ## Send a command
 
 ```sh
@@ -72,6 +84,8 @@ npm run procure -- query knowledge --q SUPPLIER_OR_ITEM
 HTTP equivalent: `GET /queries/<name>?id=...&q=...` with the same bearer key. `blocked` returns all open requests with their policy results, missing evidence, manual blockers, resolvers and schedule. `knowledge` searches vendor identity, source notes, purchases and attributed experience. It reports real and simulated observations separately and includes category-specific lead-time summaries.
 
 `me` includes the workspace name and simulation mode. The agent cannot enumerate other workspaces. Single-request and request-list responses both include `selectedQuote` (null only when none is selected) alongside `quoteId`.
+
+Policy blockers and selected-quote research issues include `resolverType` (`agent`, `owner`, or `assigned` for named manual blockers) and `resolverId`. Source/cost/timing corrections route to the enabled agent who created the request, or the earliest enabled workspace agent; if none exists the ID is null, explicitly leaving an assignment gap. Policy/approval/mandatory verification decisions route to the escalation owner. Reads by a different actor do not change assignments. Category/vendor/site purchasing delegation remains an owner decision even though research is agent work.
 
 `request.revision` changes when purchasing requirements change. Supply it as `expectedRevision` where required. `request.version` is the complete event sequence used to identify a snapshot. The CLI returns structured records for the bot to summarize with appropriate evidence; it does not fabricate natural-language answers.
 

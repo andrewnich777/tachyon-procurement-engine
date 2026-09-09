@@ -31,7 +31,7 @@ async function fixture(opts:{regulated?:boolean;technical?:boolean;subtotal?:num
     const data={title,items:[{key:'item',description:title,quantity:2,categoryId:category.id}],site:'Demo site',neededBy:addDays(today,14),bufferDays:2};
     const r=await run('request.create',{data},agent); const ref={requestId:r.id,expectedRevision:1};
     await run('classification.verify',{...ref,regulated:!!opts.regulated,technical:!!opts.technical,evidence});
-    const q=await run('quote.add',{requestId:r.id,vendorId:vendor.id,data:{summary:'FICTIONAL supplier quote',currency:'USD',costs:{subtotal:opts.subtotal??5000,shipping:500,tax:0,hazmat:0,other:0},leadDays:3,leadBasis:'vendor',expiresOn:addDays(today,30),sources:[evidence],fit:'Fixture matches requested quantity and scope'}},agent);
+    const q=await run('quote.add',{requestId:r.id,vendorId:vendor.id,data:{summary:'FICTIONAL supplier quote',currency:'USD',costs:{subtotal:opts.subtotal??5000,shipping:500,tax:0,hazmat:0,other:0},leadDays:3,leadBasis:'vendor',expiresOn:addDays(today,30),sources:[evidence],fit:'Fixture matches requested quantity and scope',evidence:[{criterion:'scope',status:'supported',itemKeys:['item'],finding:'Fixture covers both requested units',sources:[evidence]},{criterion:'availability',status:'supported',site:'Demo site',finding:'Fixture vendor confirms delivery basis',sources:[evidence]}]}},agent);
     await run('quote.select',{...ref,quoteId:q.id,reason:'Source supports requested scope'},agent);
     await run('approval.grant',{...ref,quoteId:q.id,expiresAt:new Date(Date.now()+3600000).toISOString(),evidence});
     return {r,q,ref,data};
@@ -179,4 +179,71 @@ test('human-discovered regulation survives later intake edits and cannot be rela
   await assert.rejects(()=>f.run('classification.verify',{...ref,regulated:false,technical:false,evidence}),/cannot be removed/);
   await f.run('request.update',{...ref,data,reason:'Clarify original description'},f.agent);
   const state:any=await f.engine.read(f.agent,'request',{id:r.id});assert.equal(state.data.regulated,true);
+});
+
+test('structured research persists and can support a recommendation without granting human verification',async()=> {
+  const f=await fixture({technical:true}),{r,ref,data}=await f.request('Specified amplifier');
+  const before:any=await f.engine.read(f.agent,'request',{id:r.id});
+  const {requestRevision,...base}=before.selectedQuote.data;
+  const evidenceRows=[...base.evidence,{criterion:'requirement:spec',status:'supported',finding:'Manufacturer specification matches the exact requested model',sources:[evidence]}];
+  const reviews=[{subject:'product',itemKey:'item',target:'Specified amplifier variant',platform:'Fixture supplier',rating:4.7,scaleMax:5,reviewCount:800,source:evidence}];
+  const input={requestId:r.id,vendorId:f.vendor.id,data:{...base,evidence:evidenceRows,reviews}};
+  const key=randomUUID(),q=await f.run('quote.add',input,f.agent,key);
+  assert.equal(q.research.readyToRecommend,true);
+  assert.deepEqual(await f.run('quote.add',input,f.agent,key),q);
+  const selected=await f.run('quote.select',{...ref,quoteId:q.id,reason:'Evidence-backed option'},f.agent);
+  assert.equal(selected.selectedQuote.id,q.id);assert.equal(selected.research.reviews[0].reviewCount,800);
+  const saved:any=await f.engine.read(f.agent,'request',{id:r.id});
+  assert.equal(saved.research.readyToRecommend,true);
+  assert.equal(saved.research.checklist.find((c:any)=>c.criterion==='requirement:spec').status,'supported');
+  assert.ok(saved.policy.blocks.some((b:any)=>b.code==='requirement:spec'&&b.resolverId===f.owner.id&&b.resolverType==='owner'));
+  assert.equal(saved.policy.allowed,false);
+  await assert.rejects(()=>f.run('requirement.verify',{...ref,key:'spec',site:'Demo site',validFrom:today,validUntil:addDays(today,30),evidence},f.agent),/owner or reviewer/);
+  const knowledge:any=await f.engine.read(f.agent,'knowledge');
+  assert.equal(knowledge[0].researchedQuotes.find((v:any)=>v.id===q.id).data.reviews[0].reviewCount,800);
+  await f.run('requirement.verify',{...ref,key:'spec',site:'Demo site',validFrom:today,validUntil:addDays(today,30),evidence});
+  const contradicted=await f.run('quote.add',{...input,data:{...input.data,evidence:evidenceRows.map((e:any)=>e.criterion==='requirement:spec'?{...e,status:'contradicted',finding:'Correction: connector incompatible'}:e)}},f.agent);
+  await f.run('quote.select',{...ref,quoteId:contradicted.id,reason:'Keep incompatible option visible for review'},f.agent);
+  await f.run('approval.grant',{...ref,quoteId:contradicted.id,expiresAt:new Date(Date.now()+3600000).toISOString(),evidence});
+  const blocked=await f.run('checkout.simulate',{...ref,quoteId:contradicted.id},f.agent);
+  assert.equal(blocked.outcome,'blocked');assert.ok(blocked.policy.blocks.some((b:any)=>b.code==='research:contradicted:requirement:spec'));
+  await f.run('request.update',{...ref,data:{...data,items:data.items.map(i=>({...i,quantity:3}))},reason:'Quantity changed'},f.agent);
+  const revised:any=await f.engine.read(f.agent,'request',{id:r.id});
+  assert.equal(revised.research.readyToRecommend,false);assert.ok(revised.research.checklist.every((c:any)=>c.status==='unresolved'));
+});
+
+test('saved quote corrections route to the bot while approvals and manual blockers retain human ownership',async()=> {
+  const f=await fixture(),{r,ref}=await f.request('Snacks');
+  const q=await f.run('quote.add',{requestId:r.id,vendorId:f.vendor.id,data:{summary:'Snack assortment',terms:'List-price snapshot. Pickup assumed.',currency:'USD',costs:{subtotal:1598,tax:null,shipping:0,hazmat:0,other:0},leadDays:0,leadBasis:'vendor',expiresOn:null,sources:[evidence],fit:'Unverified pickup option'}},f.agent);
+  assert.ok(q.research.issues.some((i:any)=>i.code==='price-basis-mismatch'));
+  assert.ok(q.research.issues.some((i:any)=>i.code==='vendor-timing-unsupported'));
+  await f.run('quote.select',{...ref,quoteId:q.id,reason:'Provisional candidate'},f.agent);
+  const manual=await f.run('blocker.add',{requestId:r.id,reason:'Reviewer input',resolverId:f.reviewer.id,decisionBy:null});
+  for(const actor of [f.agent,f.owner]) {
+    const saved:any=await f.engine.read(actor,'request',{id:r.id});
+    for(const code of ['cost-unknown','quote-expired','research:price-basis-mismatch','research:vendor-timing-unsupported']) {
+      const b=saved.policy.blocks.find((b:any)=>b.code===code);assert.equal(b.resolverType,'agent');assert.equal(b.resolverId,f.agent.id);
+    }
+    assert.equal(saved.policy.blocks.find((b:any)=>b.code==='approval-required').resolverId,f.owner.id);
+    assert.equal(saved.policy.blocks.find((b:any)=>b.code==='blocker:'+manual.id).resolverId,f.reviewer.id);
+    assert.ok(saved.research.issues.every((i:any)=>i.resolverType==='agent'&&i.resolverId===f.agent.id));
+  }
+  await db.update(t.workspaces).set({policy:{}}).where(eq(t.workspaces.id,f.workspaceId));
+  const unconfigured:any=await f.engine.read(f.owner,'request',{id:r.id});
+  assert.equal(unconfigured.policy.blocks.find((b:any)=>b.code==='policy-unconfigured').resolverId,f.owner.id);
+  assert.equal(unconfigured.policy.blocks.find((b:any)=>b.code==='cost-unknown').resolverId,f.agent.id);
+});
+
+test('research evidence rejects duplicate criteria, unknown item references and duplicate review observations',async()=> {
+  const f=await fixture(),{r}=await f.request();
+  const saved:any=await f.engine.read(f.agent,'request',{id:r.id});
+  const {requestRevision,...base}=saved.selectedQuote.data;
+  const add=(changes:any)=>f.run('quote.add',{requestId:r.id,vendorId:f.vendor.id,data:{...base,...changes}},f.agent);
+  await assert.rejects(()=>add({evidence:[base.evidence[0],base.evidence[0]]}),/Duplicate evidence/);
+  await assert.rejects(()=>add({evidence:[{...base.evidence[0],criterion:'requirement:invented'}]}),/Unknown evidence/);
+  await assert.rejects(()=>add({evidence:[{...base.evidence[0],itemKeys:['other-item']}]}),/unknown request item/);
+  const review={subject:'product',itemKey:'item',target:'Exact variant',platform:'Fixture',rating:4.7,scaleMax:5,reviewCount:800,source:evidence};
+  await assert.rejects(()=>add({reviews:[{...review,itemKey:'unknown'}]}),/unknown request item/);
+  await assert.rejects(()=>add({reviews:[review,review]}),/Duplicate review/);
+  const final:any=await f.engine.read(f.agent,'request',{id:r.id});assert.equal(final.quotes.length,saved.quotes.length);
 });

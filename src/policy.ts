@@ -1,6 +1,12 @@
 import { day, daysBetween, hash, policyData, schedule, total, type State, type QuoteData, type Policy } from './domain.js';
+import { assessResearch } from './research.js';
 
 export type Block = { code: string; reason: string; resolverId: string | null };
+export function routeBlock(b:Block,ownerId:string|null,agentId:string|null) {
+  if(b.code.startsWith('blocker:')) return {...b,resolverType:'assigned' as const};
+  const research=b.code.startsWith('research:') || ['classification-missing','quote-missing','quote-stale','cost-unknown','quote-expired','catalog-price-stale','currency-mismatch'].includes(b.code);
+  return {...b,resolverId:research?agentId:ownerId,resolverType:research?'agent' as const:'owner' as const};
+}
 export function evaluate(s: State, quote: {id:string; vendorId:string; data:QuoteData & {requestRevision:number}} | null,
   rawPolicy: unknown, spent: number, categoryAllowed: boolean, now = new Date(), policyVersion=0) {
   const blocks: Block[] = [];
@@ -39,6 +45,8 @@ export function evaluate(s: State, quote: {id:string; vendorId:string; data:Quot
   }
   if (regulated && !s.data.requirements.some(r=>r.kind==='permit')) block('permit-requirement','A reviewer must establish the applicable permit/license requirement.');
   if (technical && !s.data.requirements.some(r=>r.kind==='specification')) block('technical-requirement','A reviewer must establish the technical specification requirement.');
+  const research=assessResearch(s,quote,now);
+  for(const issue of research.issues) if(issue.blocksPurchase) block('research:'+issue.code,issue.message);
   for (const b of Object.values(s.blockers)) blocks.push({code:'blocker:'+b.id, reason:b.reason, resolverId:b.resolverId});
   const decision = s.approvals.findLast(a => a.revision===s.revision && a.quoteId===quote?.id
     && a.policyHash===hash({policy:rawPolicy,version:policyVersion}) && Date.parse(a.expiresAt)>+now);
@@ -56,5 +64,5 @@ export function evaluate(s: State, quote: {id:string; vendorId:string; data:Quot
   }
   return { allowed:routineBlocks.length===0, humanAllowed:blocks.length===0, humanOnly, regulated, expensive,
     totalCents:amount, currency:q?.currency ?? s.data.currency, spentCents:spent, blocks:routineBlocks,
-    humanBlocks:blocks, schedule:timing, policyHash:hash({policy:rawPolicy,version:policyVersion}), escalationOwnerId:owner };
+    humanBlocks:blocks, schedule:timing, research, policyHash:hash({policy:rawPolicy,version:policyVersion}), escalationOwnerId:owner };
 }
