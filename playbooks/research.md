@@ -8,7 +8,31 @@ Consult prior purchases, vendors, sources, and relevant experience. For candidat
 
 For a catalog/list price use `priceBasis: "list-snapshot"` and `priceCheckedAt` with the actual check timestamp. `expiresOn` may be omitted; do not invent a supplier validity date. Snapshots older than seven calendar days must be researched again and saved as new quotes before commitment. Include a known offer expiry when one exists. Formal quotes (the default) still need a current `expiresOn` before commitment. Neither basis bypasses unknown landed costs, evidence, approvals, or human ordering requirements. A changed price or refreshed snapshot is a new immutable quote and needs a new selection and any required approval.
 
-Use existing bot tools and optional independent helpers. Keep a single coherent recommendation and avoid duplicated research. Work within any configured research budget; return partial findings if that limit is reached.
+## Scale research to the task
+
+Use native agent delegation when available and useful. Choose the size from the number of independent questions, breadth of the supplier search, and consequences of a wrong recommendation—not just purchase price. The user should not need to specify an agent count. These are starting ranges, not quotas:
+
+| Research scope | Suggested parallel research workers |
+| --- | --- |
+| Straightforward item with clear requirements and familiar sources | 1–2; work directly if delegation adds no value |
+| Several viable sources or a consequential constraint such as an allergy, compatibility, or contractor credentials | 3–5, with a distinct evidence-checking assignment |
+| Broad supplier discovery or complex equipment with several independent specification/logistics questions | 6–8 only when that many useful, non-overlapping assignments exist |
+
+For allergy-constrained snacks, useful assignments are product/retailer discovery, exact-product allergen documentation, and reviews plus landed-cost/availability checks. For services or equipment, choose specialties relevant to that request. Several agents searching the same generic query is not a thorough investigation.
+
+Give each worker the shared requirements, a bounded question, source/evidence expectations, and a stopping condition. Workers return candidate identifiers, URLs, checked-at times, supported claims, contradictions, and unknowns. Research workers do not contact suppliers, purchase, approve, or modify procurement records. The coordinating Procurement Bot deduplicates findings, resolves conflicts, and persists one coherent result through the API.
+
+Keep expansion within the available research time, usage, and user constraints. Stop when the shortlist is adequately supported or a specific missing fact requires external input; do not grow the swarm to repeat completed work. If native delegation is unavailable, perform the same distinct research and review passes yourself. Do not claim that agents ran unless they actually did.
+
+## Check evidence before recommending
+
+Have an independent worker challenge consequential recommendations when delegation is available; otherwise perform a separate review pass. Check the proposed option against each hard requirement, inspect the strongest disqualifying evidence, and check the exact item/variant, supplier, quantities, price, and timing. A second agent's agreement is not evidence. Unresolved conflicting sources remain explicit blockers, not majority-vote decisions.
+
+For food allergies, distinguish ingredients, precautionary allergen statements, and manufacturer facility information. Do not infer suitability from a product being corn-based, vegan, popular, or lacking an observed warning. Seek current documentation for the exact product and retain the source of each claim. If that evidence cannot be established, label suitability unresolved and continue looking for better-documented candidates. Agent research does not replace the required human allergy verification.
+
+Do not turn assumptions into vendor-confirmed facts. If local stock, pickup eligibility, tax, freight, or delivery timing is unknown, persist it as unknown. Set `leadDays: null` when unsupported; use `leadBasis: "vendor"` only for evidenced supplier timing. A price below the budget before unresolved charges is not a confirmed within-budget total. Save catalog pricing with the structured `priceBasis` and `priceCheckedAt` fields, not merely a note saying "list-price snapshot".
+
+Before reporting completion, read the saved request back. Check that the selected quote, evidence notes, ratings/review counts where available, and unresolved blockers match the recommendation. Correct avoidable schema or classification-of-price errors through the API. Do not claim research is complete when a central requirement was only deferred to the user without attempting to investigate it. If a source cannot be accessed or the research budget is exhausted, report that specific limitation and the next useful action.
 
 ## Ratings and review evidence
 
