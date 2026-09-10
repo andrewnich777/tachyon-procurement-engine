@@ -171,6 +171,19 @@ export class Engine {
             if(evidence.itemKeys?.some(key=>!s!.data.items.some(item=>item.key===key))) fail('Evidence refers to an unknown request item.');
           }
           for(const review of cmd.data.reviews??[]) if(review.itemKey && !s!.data.items.some(i=>i.key===review.itemKey)) fail('Review refers to an unknown request item.');
+          const recommendationKeys=new Set<string>();
+          for(const item of cmd.data.recommendation??[]) {
+            if(recommendationKeys.has(item.key)) fail('Duplicate recommendation key.');
+            recommendationKeys.add(item.key);
+            if(!s!.data.items.some(i=>i.key===item.itemKey)) fail('Recommendation refers to an unknown request item.');
+            if(item.comparison?.alternatives.some(alt=>alt.target.trim().toLowerCase()===item.target.trim().toLowerCase())) fail('A comparison alternative must differ from the recommended target.');
+          }
+          for(const review of cmd.data.reviews??[]) if(review.recommendationKey) {
+            const item=cmd.data.recommendation?.find(i=>i.key===review.recommendationKey);
+            if(!item) fail('Review refers to an unknown recommendation.');
+            if(review.subject!==item.subject || review.itemKey!==item.itemKey || review.target.trim().toLowerCase()!==item.target.trim().toLowerCase())
+              fail('Review must match the recommendation subject, request item and exact target.');
+          }
           const reviewKeys=new Set<string>();
           for(const review of cmd.data.reviews??[]) {
             const key=hash([review.subject,review.itemKey??null,review.target.toLowerCase(),review.platform.toLowerCase(),review.source.url]);

@@ -187,8 +187,8 @@ test('structured research persists and can support a recommendation without gran
   const before:any=await f.engine.read(f.agent,'request',{id:r.id});
   const {requestRevision,recordedBy,...base}=before.selectedQuote.data;
   const evidenceRows=[...base.evidence,{criterion:'requirement:spec',status:'supported',finding:'Manufacturer specification matches the exact requested model',sources:[evidence]}];
-  const reviews=[{subject:'product',itemKey:'item',target:'Specified amplifier variant',platform:'Fixture supplier',rating:4.7,scaleMax:5,reviewCount:800,source:evidence}];
-  const input={requestId:r.id,vendorId:f.vendor.id,data:{...base,evidence:evidenceRows,reviews}};
+  const reviews=[{recommendationKey:'amp',subject:'product',itemKey:'item',target:'Specified amplifier variant',platform:'Fixture supplier',rating:4.7,scaleMax:5,reviewCount:800,source:evidence}];
+  const input={requestId:r.id,vendorId:f.vendor.id,data:{...base,evidence:evidenceRows,reviews,recommendation:[{key:'amp',itemKey:'item',subject:'product',target:'Specified amplifier variant',comparison:{rationale:'Exact specification fit, relevant 4.7/5 from 800 reviews and lower cost.',alternatives:[{target:'Alternative amplifier',reason:'Wrong connector; rejected despite higher rating.',sources:[evidence]}]}}]}};
   const key=randomUUID(),q=await f.run('quote.add',input,f.agent,key);
   assert.equal(q.research.readyToRecommend,true);
   assert.deepEqual(await f.run('quote.add',input,f.agent,key),q);
@@ -304,4 +304,38 @@ test('agent intake and legacy constraints are unconfirmed, with human confirmati
   assert.equal(saved.revision,1);
   const legacy=project(r.id,[{id:randomUUID(),requestId:r.id,actorId:f.owner.id,sequence:1,type:'request.created',payload:{data},createdAt:new Date()}]);
   assert.equal(legacy.constraintProvenance!.confirmed,false);
+});
+
+test('per-product review corrections persist without approvals and cannot borrow another product rating',async()=>{
+  const f=await fixture(),{r,ref}=await f.request('Office snack assortment');
+  await f.run('approval.revoke',{requestId:r.id,reason:'Research must continue without purchasing approval'});
+  const initial:any=await f.engine.read(f.agent,'request',{id:r.id});
+  const {requestRevision,recordedBy,...base}=initial.selectedQuote.data;
+  const comparison={rationale:'Compared exact variants, meaningful rating counts, requirements and price.',alternatives:[{target:'Alternative snack',reason:'Higher cost with no stronger requirement evidence.',sources:[evidence]}]};
+  const recommendation=[{key:'bars',itemKey:'item',subject:'product',target:'Exact bars 18ct',comparison},{key:'puffs',itemKey:'item',subject:'product',target:'Exact puffs 8ct'}];
+  const reviews=[{recommendationKey:'bars',subject:'product',itemKey:'item',target:'Exact bars 18ct',platform:'Fixture retailer',rating:4.5,scaleMax:5,reviewCount:183,source:evidence}];
+  const input={requestId:r.id,vendorId:f.vendor.id,data:{...base,recommendation,reviews}};
+  const add=(data:any)=>f.run('quote.add',{...input,data},f.agent);
+  await assert.rejects(()=>add({...input.data,recommendation:[recommendation[0],recommendation[0]]}),/Duplicate recommendation/);
+  await assert.rejects(()=>add({...input.data,reviews:[{...reviews[0],recommendationKey:'unknown'}]}),/unknown recommendation/);
+  for(const change of [{target:'Wrong variant'},{subject:'supplier'},{itemKey:undefined}])
+    await assert.rejects(()=>add({...input.data,reviews:[{...reviews[0],...change}]}));
+  await assert.rejects(()=>add({...input.data,recommendation:[{...recommendation[0],comparison:{...comparison,alternatives:[{...comparison.alternatives[0],target:'Exact bars 18ct'}]}}]}),/must differ/);
+  const draft=await add(input.data);
+  assert.equal(draft.research.readyToRecommend,false);
+  await f.run('quote.select',{...ref,quoteId:draft.id,reason:'Research in progress'},f.agent);
+  const saved:any=await f.engine.read(f.agent,'request',{id:r.id});
+  assert.equal(saved.research.issues.find((i:any)=>i.code==='reviews-missing:puffs').resolverId,f.agent.id);
+  assert.ok(saved.policy.blocks.some((b:any)=>b.code==='approval-required'));
+  assert.ok(!saved.policy.blocks.some((b:any)=>b.code==='research:reviews-missing:puffs'));
+  const corrected={...input.data,recommendation:[recommendation[0],{...recommendation[1],comparison,reviewGap:{reason:'Exact variant has no published reviews at retailer or manufacturer.',sources:[evidence]}}]};
+  const key=randomUUID(),complete=await f.run('quote.add',{...input,data:corrected},f.agent,key);
+  assert.deepEqual(await f.run('quote.add',{...input,data:corrected},f.agent,key),complete);
+  assert.equal(complete.research.readyToRecommend,true);
+  assert.equal(complete.research.researchPermission.approvalRequired,false);
+  await f.run('quote.select',{...ref,quoteId:complete.id,reason:'Comparison complete; approval still pending'},f.agent);
+  const final:any=await f.engine.read(f.agent,'request',{id:r.id});
+  assert.equal(final.research.reviewCoverage.length,2);assert.equal(final.policy.allowed,false);
+  const knowledge:any=await f.engine.read(f.agent,'knowledge');
+  assert.equal(knowledge[0].researchedQuotes.find((q:any)=>q.id===complete.id).data.recommendation.length,2);
 });

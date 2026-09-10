@@ -40,6 +40,30 @@ export function assessResearch(s:State,quote:Quote|null,now=new Date()) {
     if(c.required && row.status==='unresolved') add('evidence-missing:'+c.criterion,'evidence',`Investigate and record evidence for ${c.label}, or report the specific unavailable fact.`);
     return row;
   });
+  const reviewCoverage=(q?.recommendation??[]).map(item=>{
+    const observations=(q?.reviews??[]).filter(r=>r.recommendationKey===item.key && r.subject===item.subject && r.itemKey===item.itemKey && r.target.trim().toLowerCase()===item.target.trim().toLowerCase() && Date.parse(r.source.checkedAt)<=+now);
+    const checked=(sources:Source[]|undefined)=>!!sources?.length && sources.every(s=>Date.parse(s.checkedAt)<=+now);
+    const reviewStatus=observations.length?'observed':item.reviewGap && checked(item.reviewGap.sources)?'unavailable':'missing';
+    const comparison=item.comparison;
+    const compared=!!comparison && (comparison.alternatives.length>0
+      ?comparison.alternatives.every(a=>a.target.trim().toLowerCase()!==item.target.trim().toLowerCase() && checked(a.sources))
+      :!!comparison.noAlternative && checked(comparison.noAlternative.sources));
+    if(reviewStatus==='missing') add('reviews-missing:'+item.key,'recommendation','Investigate ratings and review counts for '+item.target+'; save linked observations or a sourced explanation of their absence.');
+    if(!compared) add('comparison-missing:'+item.key,'recommendation','Explain why '+item.target+' beats researched alternatives, or document why no relevant alternative was found.');
+    return {key:item.key,itemKey:item.itemKey,target:item.target,subject:item.subject,reviewStatus,observations,
+      reviewGap:item.reviewGap??null,comparison:comparison??null,compared};
+  });
+  const coverageComplete=reviewCoverage.length>0 && s.data.items.every(i=>reviewCoverage.some(r=>r.itemKey===i.key));
+  if(q && !coverageComplete) add('recommendation-items-missing','recommendation','List every exact product or service provider in the proposed purchase. A generic assortment and a single rating do not establish coverage.');
+  const reviewsRow=checklist.find(r=>r.criterion==='reviews')!;
+  reviewsRow.required=true;
+  reviewsRow.status=coverageComplete && reviewCoverage.every(r=>r.reviewStatus!=='missing')?'supported':'unresolved';
+  reviewsRow.finding='Every recommended target needs its own relevant ratings/counts or a sourced explanation of unavailable reviews.';
+  reviewsRow.sources=reviewCoverage.flatMap(r=>r.observations.map(o=>o.source).concat(r.reviewGap?.sources??[]));
+  checklist.push({criterion:'comparison',label:'Why each recommended target beats alternatives',required:true,
+    status:coverageComplete && reviewCoverage.every(r=>r.compared)?'supported':'unresolved',
+    finding:'Compare requirement fit, rating/count evidence and price; do not invent ratings or reject specialist items merely for lacking reviews.',
+    sources:reviewCoverage.flatMap(r=>r.comparison?.alternatives.flatMap(a=>a.sources).concat(r.comparison.noAlternative?.sources??[])??[])});
   if(!s.constraintProvenance?.confirmed)
     add('constraints-unconfirmed','constraints','The request was captured by an agent or legacy record. Have the requester/owner confirm the captured constraints; do not invent or change them.',true);
   if(q?.leadBasis==='owner-estimate' && q.recordedBy?.role!=='owner')
@@ -74,12 +98,11 @@ export function assessResearch(s:State,quote:Quote|null,now=new Date()) {
       add('formal-quote-validity','expiresOn','Obtain formal quote validity, or use list-snapshot for a researched catalog price.');
     if(q.sources.some(source=>Date.parse(source.checkedAt)>+now) || q.reviews?.some(r=>Date.parse(r.source.checkedAt)>+now))
       add('future-source','sources','Correct future source/review check timestamps.',true);
-    if(!q.reviews?.length && !q.evidence?.some(e=>e.criterion==='reviews'))
-      add('reviews-not-investigated','reviews','Record relevant rating/count observations or an unresolved reviews finding explaining unavailable evidence.');
   } else add('quote-missing','quote','Research and save a candidate quote.');
   return {quoteId:quote?.id??null,requestRevision:s.revision,
     readyToRecommend:!!q && checklist.filter(r=>r.required).every(r=>r.status==='supported') && !issues.length,
-    checklist,issues,reviews:q?.reviews??[],
+    checklist,issues,reviews:q?.reviews??[],reviewCoverage,
+    researchPermission:{approvalRequired:false,minimumWorkers:3,note:'Continue permitted research and native delegation while purchase/constraint gates remain blocked. Do not claim workers ran unless they did.'},
     provenance:{constraints:s.constraintProvenance??null,quote:q?.recordedBy??null},
     costBasis:q?.costBasis??'unknown',timingBasis:q?.leadBasis??null,
     evidenceMeaning:'Source-linked research assertions, not independent fact verification or purchasing authorization.'};

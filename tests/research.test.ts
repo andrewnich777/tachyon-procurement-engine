@@ -13,13 +13,14 @@ function fixture() {
     evidence:[{criterion:'scope',status:'supported',itemKeys:['snack'],finding:'Two boxes of requested variant',sources:[source]},
       {criterion:'availability',status:'supported',site:'Office',availability:{basis:'location-confirmed',location:'123 Fixture Street',itemKeys:['snack']},finding:'Supplier confirms two-day delivery',sources:[source]},
       {criterion:'requirement:peanut',status:'supported',finding:'Manufacturer evidence for exact product; human verification still needed',sources:[source]}],
-    reviews:[{subject:'product',itemKey:'snack',target:'Exact snack box',platform:'Fixture store',rating:4.7,scaleMax:5,reviewCount:800,source}]}),requestRevision:1}};
+    recommendation:[{key:'box',itemKey:'snack',subject:'product',target:'Exact snack box',comparison:{rationale:'Relevant 4.7/5 across 800 reviews, documented fit and lower price than alternative.',alternatives:[{target:'Alternative snack box',reason:'Higher price for same quantity; no stronger fit evidence.',sources:[source]}]}}],
+    reviews:[{recommendationKey:'box',subject:'product',itemKey:'snack',target:'Exact snack box',platform:'Fixture store',rating:4.7,scaleMax:5,reviewCount:800,source}]}),requestRevision:1}};
   return {state,quote};
 }
 
 test('checklist covers requirements, scope, cost, timing and reviews without granting verification',()=>{
   const {state,quote}=fixture(),r=assessResearch(state,quote,now);
-  assert.equal(r.readyToRecommend,true);assert.equal(r.checklist.length,6);
+  assert.equal(r.readyToRecommend,true);assert.equal(r.checklist.length,7);
   assert.equal(r.reviews[0].reviewCount,800);assert.deepEqual(state.verifications,{});
   assert.equal(r.checklist.find(r=>r.criterion==='requirement:peanut')!.status,'supported');
 });
@@ -49,6 +50,7 @@ test('list-price prose, unknown charges and missing review observations produce 
 
 test('unavailable reviews can be explained; budget, currency, deadline and future evidence remain visible',()=>{
   const {state,quote}=fixture();delete quote.data.reviews;
+  quote.data.recommendation![0].reviewGap={reason:'Manufacturer and retailer have no exact-variant reviews',sources:[source]};
   quote.data.evidence!.push({criterion:'reviews',status:'unresolved',finding:'No relevant reviews found on manufacturer or retailer pages',sources:[]});
   assert.equal(assessResearch(state,quote,now).readyToRecommend,true);
   quote.data.currency='EUR';state.data.neededBy=null;
@@ -101,4 +103,39 @@ test('legacy owner estimates cannot impersonate authenticated provenance; histor
   }
   quote.data.costEvidence={...source,checkedAt:'2026-09-10T12:00:00Z'};
   assert.ok(assessResearch(state,quote,now).issues.some(i=>i.code==='cost-unconfirmed'&&i.blocksPurchase));
+});
+
+test('one rating cannot cover a two-product assortment, and review work needs no human approval',()=>{
+  const {state,quote}=fixture();
+  quote.data.recommendation!.push({key:'puffs',itemKey:'snack',subject:'product',target:'Exact puff bag'});
+  const incomplete=assessResearch(state,quote,now);
+  assert.equal(incomplete.readyToRecommend,false);
+  assert.equal(incomplete.reviewCoverage[0].reviewStatus,'observed');
+  assert.equal(incomplete.reviewCoverage[1].reviewStatus,'missing');
+  for(const code of ['reviews-missing:puffs','comparison-missing:puffs']) {
+    const issue=incomplete.issues.find(i=>i.code===code)!;
+    assert.equal(issue.blocksPurchase,false);
+    assert.equal(routeBlock({code:'research:'+code,reason:issue.message,resolverId:'owner'},'owner','agent').resolverId,'agent');
+  }
+  assert.equal(incomplete.researchPermission.approvalRequired,false);
+  assert.equal(incomplete.researchPermission.minimumWorkers,3);
+  const puffs=quote.data.recommendation![1];
+  puffs.reviewGap={reason:'Checked manufacturer and exact retailer variant; no relevant reviews published.',sources:[source]};
+  puffs.comparison={rationale:'No exact-variant reviews; chosen provisionally for requirement fit and price. Only matching option found.',alternatives:[],noAlternative:{reason:'Checked retailer and manufacturer catalogs for matching variants.',sources:[source]}};
+  const complete=assessResearch(state,quote,now);
+  assert.equal(complete.readyToRecommend,true);assert.equal(complete.reviewCoverage[1].reviewStatus,'unavailable');
+  puffs.reviewGap.sources[0]={...source,checkedAt:'2026-09-10T12:00:00Z'};
+  assert.equal(assessResearch(state,quote,now).reviewCoverage[1].reviewStatus,'missing');
+});
+
+test('unlinked and wrong-product ratings plus unsourced comparisons cannot establish coverage',()=>{
+  const {state,quote}=fixture();
+  delete quote.data.reviews![0].recommendationKey;
+  assert.equal(assessResearch(state,quote,now).reviewCoverage[0].reviewStatus,'missing');
+  quote.data.reviews![0].recommendationKey='box';quote.data.reviews![0].target='Different size or flavor';
+  assert.equal(assessResearch(state,quote,now).reviewCoverage[0].reviewStatus,'missing');
+  quote.data.recommendation![0].comparison!.alternatives=[];
+  assert.equal(assessResearch(state,quote,now).reviewCoverage[0].compared,false);
+  delete quote.data.recommendation;
+  assert.ok(assessResearch(state,quote,now).issues.some(i=>i.code==='recommendation-items-missing'));
 });

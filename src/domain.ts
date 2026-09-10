@@ -50,12 +50,22 @@ export const researchEvidence = z.object({
 export const reviewEvidence = z.object({
   subject: z.enum(['product','supplier']), target: short.describe('Exact product/variant or supplier/location being rated'),
   itemKey: short.optional().describe('Required for product ratings; links to a request item.'),
+  recommendationKey: short.optional().describe('Links this observation to one exact recommended product or service provider.'),
   platform: short, rating: z.number().min(0), scaleMax: z.number().min(1).max(100),
   reviewCount: z.number().int().min(1).max(1_000_000_000), source,
 }).strict().superRefine((v,ctx)=>{
   if(v.rating>v.scaleMax) ctx.addIssue({code:'custom',path:['rating'],message:'Rating cannot exceed its scale.'});
   if(v.subject==='product' && !v.itemKey) ctx.addIssue({code:'custom',path:['itemKey'],message:'Product ratings require a request item key.'});
 });
+const investigatedGap = z.object({reason:short,sources:z.array(source).min(1).max(20)}).strict();
+export const recommendationItem = z.object({
+  key:short,itemKey:short,subject:z.enum(['product','supplier']),target:short,
+  reviewGap:investigatedGap.optional().describe('If relevant reviews are unavailable, explain why and cite the places checked for this exact target.'),
+  comparison:z.object({rationale:short,
+    alternatives:z.array(z.object({target:short,reason:short,sources:z.array(source).min(1).max(20)}).strict()).max(10),
+    noAlternative:investigatedGap.optional()
+  }).strict().optional().describe('Explain rating/count relevance, requirement fit, price and tradeoffs versus actual alternatives; if none exist, document the search.')
+}).strict();
 export const quoteData = z.object({ summary: short, currency: z.string().regex(/^[A-Z]{3}$/), costs,
   leadDays: z.number().int().min(0).max(3650).nullable(), leadBasis: z.enum(['vendor', 'historical', 'owner-estimate', 'agent-estimate']),
   costBasis: z.enum(['confirmed','estimate']).optional().describe('Omitted is unknown, never confirmed. Confirmed requires evidence of the final payable total at the actual destination.'),
@@ -65,6 +75,7 @@ export const quoteData = z.object({ summary: short, currency: z.string().regex(/
   priceCheckedAt: z.iso.datetime().optional().describe('Required for list-snapshot: when the catalog price was checked. Snapshots must be rechecked after seven calendar days.'),
   sources: z.array(source).min(1).max(20),
   evidence: z.array(researchEvidence).max(40).optional().describe('Research findings, not human verification. Include scope, availability, reviews, and each requirement:<key>.'),
+  recommendation: z.array(recommendationItem).min(1).max(30).optional().describe('One entry per exact product or service provider in this candidate cart, even when the request has one generic assortment item. Drafts may omit it.'),
   reviews: z.array(reviewEvidence).max(30).optional().describe('Separate product and supplier ratings with counts, scales, and source dates.'),
   fit: short, unknowns: z.array(short).max(30).default([]), terms: z.string().max(3000).default('') }).strict();
 export type QuoteData = z.infer<typeof quoteData> & {recordedBy?:z.infer<typeof provenance>};

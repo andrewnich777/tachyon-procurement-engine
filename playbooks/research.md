@@ -2,6 +2,12 @@
 
 Apply [conversation.md](conversation.md) and [escalation.md](escalation.md). Choose the research strategy appropriate to the user's outcome; no fixed vendor count or step order is required.
 
+## Research authority
+
+The user's procurement request already authorizes ordinary research, comparison, saving candidates, and native research delegation. Do not ask for human approval to run three or more research workers, investigate ratings, replace weak candidates, or improve an answer. Purchase approval, permit/allergy verification, and constraint confirmation gate commitment, not research on the same request. Continue the research that can be done while those decisions are pending. Ask only for genuinely missing facts that block the next investigation, such as the actual store/address.
+
+Check allergies, permits and specifications in the first pass. Never change constraints to make readyToRecommend true. A useful provisional recommendation with honest unknowns is success; repeating the prior cart without fresh comparison is not reassessment. Keep schema dumps internal and use ordinary request titles.
+
 ## Required information and evidence
 
 Consult prior purchases, vendors, sources, and relevant experience. For candidates retain supplier identity, source URLs/documents, checked-at time, requirement fit, scope/quantity basis, costs/currency, shipping/tax/fees where known, lead-time basis, terms, and consequential unknowns. A researched listing is not a supplier-confirmed quote.
@@ -41,6 +47,16 @@ Prefer products and service providers with high ratings supported by a meaningfu
 When available, save observations in `quote.add.data.reviews`: `subject` (product or supplier), `target` (exact variant or supplier/location), `itemKey` for product reviews, `platform`, `rating`, `scaleMax`, `reviewCount`, and `source` (URL, note, checkedAt, fictional only for synthetic evidence). Record observations separately; do not compute rating divided by count or combine platform totals. Distinguish product reviews from seller or contractor reviews and check relevance to the exact purchase. Consider recent reviews, recurring complaints, verified-purchase indicators, and suspicious review patterns; retain those details in source notes. Do not count syndicated reviews twice.
 
 Explain a review-based preference briefly when it affects the recommendation. Do not invent missing ratings or imply that unrated specialist equipment is unsuitable. For technical purchases, specification fit, credible documentation, and relevant supplier experience can matter more than consumer reviews. Ratings never override required specifications, allergies, permits, budget, or delivery constraints.
+
+## Cover every recommended product or provider
+
+Populate quote.add.data.recommendation with one entry per exact product/variant or service provider in the candidate cart. A generic request item such as "snack assortment" can map to multiple entries; do not change the user's requested scope to itemize candidate products. Each entry has key, itemKey (the request item), subject (product or supplier), and target (exact variant/provider/location).
+
+Link each applicable review with recommendationKey and matching itemKey, subject and target. One product rating or a retailer rating cannot cover another product. For each target, save rating, scaleMax, reviewCount, platform and checked source; otherwise save reviewGap: {reason, sources} describing the actual places investigated. Lack of reviews is not automatically disqualifying, especially for specialized equipment. Never invent counts, pool syndicated reviews, or calculate rating divided by review count.
+
+Each entry also needs comparison: {rationale, alternatives: [{target, reason, sources}]}. Explain how rating AND review count, exact-product relevance, hard requirements, quantity and price affected the choice. Alternatives must be real researched options, not a second name for the winner. If no relevant alternative exists, use alternatives: [] and noAlternative: {reason, sources} inside comparison to document the search. Do not manufacture competitors to satisfy a schema.
+
+Read research.reviewCoverage and address missing reviews/comparisons yourself. These are research-quality issues, not human approval requests or additional purchasing gates. research.researchPermission explicitly confirms research needs no approval. Report the recommendation with the meaningful rating/count evidence for each product and a concise comparison, or explain where evidence was unavailable. The API checks recorded structure, not the truth of web content or whether workers actually ran.
 
 ## Persist and inspect the evidence checklist
 
